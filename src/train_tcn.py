@@ -6,13 +6,13 @@ from tqdm import tqdm
 
 import pandas as pd
 
-from utils import load_config, set_seed, device
-from io_paths import ensure_dir
-from snapshot_scaler import SnapshotStandardScaler
-from wide_builder import build_wide_per_cycle, wide_feature_columns
-from dataset_windows import WindowDataset
-from models_ae import TimeStepAE
-from models_tcn import TCNRegressor
+from src.utils import load_config, set_seed, device
+from src.io_paths import ensure_dir
+from src.snapshot_scaler import SnapshotStandardScaler
+from src.wide_builder import build_wide_per_cycle, wide_feature_columns
+from src.dataset_windows import WindowDataset
+from src.models_ae import TimeStepAE
+from src.models_tcn import TCNRegressor
 
 def loss_fn(name, huber_delta=50.0):
     if name == "mae":
@@ -55,7 +55,7 @@ def main(cfg_path="configs/config.yaml"):
     train = pd.read_csv(cfg["data"]["train_csv"])
     train = train[[id_col, cyc_train, snap_col] + sensors + targets].copy()
     train_std = scaler.transform(train)
-    train_wide = build_wide_per_cycle(train_std, id_col, cyc_train, snap_col, sensors, snapshots, cfg["missing_snapshot_fill_value"])
+    train_wide = build_wide_per_cycle(train_std, id_col, cyc_train, snap_col, sensors, snapshots, cfg["missing_snapshot_fill_value"], target_cols=targets)
     feat_cols = wide_feature_columns(sensors, snapshots)
 
     ds = WindowDataset(train_wide, feat_cols, targets, id_col, cyc_train,

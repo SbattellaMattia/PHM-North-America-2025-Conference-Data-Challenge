@@ -10,6 +10,7 @@ def build_wide_per_cycle(
     sensors: List[str],
     snapshots: List[int],
     fill_value: float = 0.0,
+    target_cols: List[str] = None,
 ):
     """
     Input: long df with rows per (id, cycle, snapshot).
@@ -23,6 +24,12 @@ def build_wide_per_cycle(
 
     for (esn, cyc), g in groups:
         row = {id_col: esn, cycle_col: cyc}
+
+        if target_cols:
+            first = g.iloc[0]
+            for t in target_cols:
+                row[t] = float(first[t])
+
         present = set(g[snapshot_col].astype(int).tolist())
 
         for k in snapshots:

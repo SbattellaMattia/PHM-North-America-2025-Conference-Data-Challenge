@@ -1,15 +1,16 @@
 import os
 import torch
 import torch.nn as nn
+import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from utils import load_config, set_seed, device
-from io_paths import ensure_dir
-from snapshot_scaler import SnapshotStandardScaler
-from wide_builder import build_wide_per_cycle, wide_feature_columns
-from dataset_windows import WindowDataset
-from models_ae import TimeStepAE
+from src.utils import load_config, set_seed, device
+from src.io_paths import ensure_dir
+from src.snapshot_scaler import SnapshotStandardScaler
+from src.wide_builder import build_wide_per_cycle, wide_feature_columns
+from src.dataset_windows import WindowDataset
+from src.models_ae import TimeStepAE
 
 import pandas as pd
 
@@ -42,10 +43,14 @@ def main(cfg_path="configs/config.yaml"):
     # Standardize
     train_std = scaler.transform(train)
 
+    train_std[sensors] = train_std[sensors].replace([np.inf, -np.inf], np.nan)
+    train_std[sensors] = train_std[sensors].fillna(0.0)
+
+
     # Build wide per cycle
     train_wide = build_wide_per_cycle(
         train_std, id_col=id_col, cycle_col=cyc_train, snapshot_col=snap_col,
-        sensors=sensors, snapshots=snapshots, fill_value=cfg["missing_snapshot_fill_value"]
+        sensors=sensors, snapshots=snapshots, fill_value=cfg["missing_snapshot_fill_value"], target_cols=targets
     )
 
     feat_cols = wide_feature_columns(sensors, snapshots)

@@ -27,6 +27,12 @@ class SnapshotStandardScaler:
                 mu[s][k] = float(np.nanmean(x))
                 sg[s][k] = float(np.nanstd(x))
 
+                sg_val = float(np.nanstd(x))
+                if not np.isfinite(sg_val) or sg_val < 1e-3:
+                    sg_val = 1.0
+                sg[s][k] = sg_val
+
+
         self.mu_ = mu
         self.sigma_ = sg
         return self

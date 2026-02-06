@@ -10,7 +10,7 @@ data:
 
 schema:
   id_col: "ESN"
-  cycle_train_col: "Cycles_Since_New"
+  cycle_train_col: "Cycles"
   cycle_eval_col: "Cycles"
   snapshot_col: "Snapshot"
   sensors:
