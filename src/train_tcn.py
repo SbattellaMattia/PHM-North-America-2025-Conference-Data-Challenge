@@ -1,6 +1,7 @@
 import os
 import torch
 import torch.nn as nn
+import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -54,7 +55,27 @@ def main(cfg_path="configs/config.yaml"):
     # Load train
     train = pd.read_csv(cfg["data"]["train_csv"])
     train = train[[id_col, cyc_train, snap_col] + sensors + targets].copy()
+
+    print("NaN in targets:", train[targets].isna().sum().to_dict())
+    print("Inf in targets:",
+    np.isinf(train[targets].to_numpy()).sum())
+
     train_std = scaler.transform(train)
+
+    bad = ~np.isfinite(train_std[sensors].to_numpy())
+    print("Non-finite in standardized sensors:", bad.sum())
+
+    if bad.any():
+        # trova le prime colonne col problema
+        bad_cols = np.where(bad.any(axis=0))[0]
+        print("Non-finite columns:", [sensors[i] for i in bad_cols[:20]])
+        # controlla per snapshot
+        for k in snapshots:
+            part = train_std[train_std[snap_col] == k][sensors].to_numpy()
+            nbad = int((~np.isfinite(part)).sum())
+            if nbad > 0:
+                print(f"Snapshot {k}: non-finite={nbad}")
+
     train_wide = build_wide_per_cycle(train_std, id_col, cyc_train, snap_col, sensors, snapshots, cfg["missing_snapshot_fill_value"], target_cols=targets)
     feat_cols = wide_feature_columns(sensors, snapshots)
 
