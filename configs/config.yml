@@ -1,0 +1,66 @@
+seed: 42
+
+data:
+  train_csv: "data/train/training_data.csv"
+  val_glob: "data/val/val_*.csv"
+  test_glob: "data/test/test_*.csv"
+  submission_template: "data/submission.csv"
+  artifacts_dir: "artifacts"
+  models_dir: "artifacts/models"
+
+schema:
+  id_col: "ESN"
+  cycle_train_col: "Cycles_Since_New"
+  cycle_eval_col: "Cycles"
+  snapshot_col: "Snapshot"
+  sensors:
+    - Sensed_Altitude
+    - Sensed_Mach
+    - Sensed_Pamb
+    - Sensed_Pt2
+    - Sensed_TAT
+    - Sensed_WFuel
+    - Sensed_VAFN
+    - Sensed_VBV
+    - Sensed_Fan_Speed
+    - Sensed_Core_Speed
+    - Sensed_T25
+    - Sensed_T3
+    - Sensed_Ps3
+    - Sensed_T45
+
+targets:
+  - Cycles_to_WW
+  - Cycles_to_HPC_SV
+  - Cycles_to_HPT_SV
+
+snapshots: [0,1,2,3,4,5,6,7]
+missing_snapshot_fill_value: 0.0   # after standardization = mean
+
+windows:
+  L: 128            # window length in cycles
+  stride: 10        # sample every N cycles (since cycles are 10-step)
+  min_cycles: 200   # minimum cycles required to create windows
+
+ae:
+  latent_dim: 48
+  hidden_dim: 256
+  dropout: 0.1
+  noise_std: 0.05
+  lr: 0.001
+  batch_size: 64
+  epochs: 30
+
+tcn:
+  channels: [128, 128, 128]
+  kernel_size: 5
+  dropout: 0.2
+  lr: 0.001
+  batch_size: 64
+  epochs: 40
+  loss: "huber"     # "mae" | "mse" | "huber"
+  huber_delta: 50.0
+
+inference:
+  use_end_to_end_finetune: false
+  clip_min: 0.0
