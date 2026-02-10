@@ -1,0 +1,110 @@
+{
+  "Cycles_to_WW": {
+    "MI_top": [
+      "ratio_Sensed_Core_Speed_Sensed_T5",
+      "ratio_Sensed_Ps3_Sensed_P25",
+      "diff_Sensed_Altitude_Sensed_VAFN",
+      "ratio_Sensed_Core_Speed_Sensed_T45",
+      "ratio_Sensed_TAT_Sensed_T5",
+      "diff_Sensed_Mach_Sensed_P25",
+      "diff_Sensed_T3_Sensed_T5",
+      "ratio_Sensed_Altitude_Sensed_VBV",
+      "ratio_Sensed_Mach_Sensed_T45",
+      "ratio_Sensed_Altitude_Sensed_WFuel",
+      "ratio_Sensed_Pamb_Sensed_T5",
+      "diff_Sensed_Pamb_Sensed_VBV",
+      "log_Sensed_Pamb",
+      "Sensed_Pamb",
+      "ratio_Sensed_T25_Sensed_Ps3",
+      "diff_Sensed_Mach_Sensed_Pamb",
+      "square_Sensed_Pamb",
+      "sqrt_Sensed_Pamb",
+      "ratio_Sensed_Pamb_Sensed_T3",
+      "ratio_Sensed_T3_Sensed_T5"
+    ],
+    "forward_selected": [
+      "diff_Sensed_T25_Sensed_T5",
+      "ratio_Sensed_Mach_Sensed_T5",
+      "ratio_Sensed_Fan_Speed_Sensed_Core_Speed",
+      "ratio_Sensed_Mach_Sensed_T45",
+      "ratio_Sensed_Altitude_Sensed_VAFN",
+      "ratio_Sensed_Altitude_Sensed_WFuel",
+      "ratio_Sensed_Fan_Speed_Sensed_P25",
+      "square_Sensed_WFuel",
+      "ratio_Sensed_Pamb_Sensed_WFuel",
+      "ratio_Sensed_Mach_Sensed_WFuel"
+    ]
+  },
+  "Cycles_to_HPC_SV": {
+    "MI_top": [
+      "ratio_Sensed_T3_Sensed_T45",
+      "diff_Sensed_T3_Sensed_T5",
+      "ratio_Sensed_T25_Sensed_T5",
+      "ratio_Sensed_TAT_Sensed_T5",
+      "ratio_Sensed_TAT_Sensed_T45",
+      "ratio_Sensed_T3_Sensed_T5",
+      "ratio_Sensed_T25_Sensed_T45",
+      "ratio_Sensed_Ps3_Sensed_P25",
+      "ratio_Sensed_TAT_Sensed_T3",
+      "diff_Sensed_Fan_Speed_Sensed_T5",
+      "ratio_Sensed_TAT_Sensed_T25",
+      "diff_Sensed_T25_Sensed_T5",
+      "ratio_Sensed_T45_Sensed_T5",
+      "diff_Sensed_T3_Sensed_T45",
+      "ratio_Sensed_Fan_Speed_Sensed_T5",
+      "ratio_Sensed_Core_Speed_Sensed_T5",
+      "ratio_Sensed_Core_Speed_Sensed_T45",
+      "diff_Sensed_TAT_Sensed_T5",
+      "ratio_Sensed_Fan_Speed_Sensed_T45",
+      "diff_Sensed_Fan_Speed_Sensed_T45"
+    ],
+    "forward_selected": [
+      "ratio_Sensed_TAT_Sensed_T5",
+      "ratio_Sensed_Mach_Sensed_WFuel",
+      "ratio_Sensed_T25_Sensed_T45",
+      "ratio_Sensed_Mach_Sensed_Fan_Speed",
+      "ratio_Sensed_Fan_Speed_Sensed_T45",
+      "ratio_Sensed_TAT_Sensed_T3",
+      "ratio_Sensed_Mach_Sensed_VAFN",
+      "diff_Sensed_T3_Sensed_T5",
+      "ratio_Sensed_T3_Sensed_T5",
+      "diff_Sensed_TAT_Sensed_Ps3"
+    ]
+  },
+  "Cycles_to_HPT_SV": {
+    "MI_top": [
+      "diff_Sensed_T3_Sensed_T5",
+      "ratio_Sensed_T3_Sensed_T45",
+      "ratio_Sensed_T3_Sensed_T5",
+      "ratio_Sensed_Ps3_Sensed_P25",
+      "diff_Sensed_T3_Sensed_T45",
+      "ratio_Sensed_T25_Sensed_T5",
+      "ratio_Sensed_TAT_Sensed_T5",
+      "ratio_Sensed_TAT_Sensed_T45",
+      "ratio_Sensed_T25_Sensed_T45",
+      "diff_Sensed_Fan_Speed_Sensed_T5",
+      "ratio_Sensed_T25_Sensed_T3",
+      "ratio_Sensed_Core_Speed_Sensed_T45",
+      "ratio_Sensed_WFuel_Sensed_Ps3",
+      "ratio_Sensed_Pt2_Sensed_Ps3",
+      "ratio_Sensed_TAT_Sensed_T25",
+      "ratio_Sensed_Fan_Speed_Sensed_T45",
+      "ratio_Sensed_Core_Speed_Sensed_T5",
+      "ratio_Sensed_Pt2_Sensed_P25",
+      "ratio_Sensed_Ps3_Sensed_T45",
+      "diff_Sensed_Fan_Speed_Sensed_T45"
+    ],
+    "forward_selected": [
+      "diff_Sensed_T3_Sensed_T5",
+      "ratio_Sensed_Mach_Sensed_WFuel",
+      "diff_Sensed_WFuel_Sensed_P25",
+      "ratio_Sensed_T25_Sensed_T45",
+      "diff_Sensed_Altitude_Sensed_T45",
+      "ratio_Sensed_Mach_Sensed_Pt2",
+      "ratio_Sensed_Ps3_Sensed_T45",
+      "ratio_Sensed_Pt2_Sensed_TAT",
+      "ratio_Sensed_Altitude_Sensed_Pamb",
+      "diff_Sensed_Fan_Speed_Sensed_Core_Speed"
+    ]
+  }
+}
