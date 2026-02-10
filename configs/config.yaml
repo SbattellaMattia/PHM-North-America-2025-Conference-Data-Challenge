@@ -34,7 +34,7 @@ targets:
   - Cycles_to_HPC_SV
   - Cycles_to_HPT_SV
 
-snapshots: [0,1,2,3,4,5,6,7]
+snapshots: [1,2,3,4,5,6,7,8]
 missing_snapshot_fill_value: 0.0   # after standardization = mean
 
 windows:
@@ -49,7 +49,7 @@ ae:
   noise_std: 0.05
   lr: 0.001
   batch_size: 64
-  epochs: 30
+  epochs: 100
 
 tcn:
   channels: [128, 128, 128]
@@ -57,7 +57,7 @@ tcn:
   dropout: 0.2
   lr: 0.001
   batch_size: 64
-  epochs: 40
+  epochs: 200
   loss: "huber"     # "mae" | "mse" | "huber"
   huber_delta: 50.0
 
