@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Load the targeted cleaned data
-df = pd.read_csv('/Users/niccolociotti/Desktop/PHM-North-America-2025-Conference-Data-Challenge/data/outlier_cleaned_data.csv')
+df = pd.read_csv('../data/outlier_cleaned_data.csv')
 
 # Identify sensor columns
 sensor_cols = [col for col in df.columns if col.startswith('Sensed_')]
@@ -33,7 +33,7 @@ def standardize_sensors_by_snapshot(df):
 df_final = standardize_sensors_by_snapshot(df)
 
 # 3. Salva il CSV finale
-df_final.to_csv('/Users/niccolociotti/Desktop/PHM-North-America-2025-Conference-Data-Challenge/data/standardized_cleaned_data.csv', index=False)
+df_final.to_csv('../data/standardized_cleaned_data.csv', index=False)
 
 # Summary statistics for the user
 stats = df_standardized[sensor_cols].agg(['mean', 'std']).round(4)
