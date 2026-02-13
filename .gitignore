@@ -3,3 +3,5 @@
 .conda
 src/__pycache__
 venv
+*.egg-info/
+*.pyc

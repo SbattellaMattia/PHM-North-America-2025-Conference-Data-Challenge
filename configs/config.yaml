@@ -1,18 +1,41 @@
-seed: 42
+# ============================================================================
+# Configuration File - Turbofan RUL Prediction
+# ============================================================================
+# Updated: 2026-02-13
 
+
+# ----------------------------------------------------------------------------
+# General
+# ----------------------------------------------------------------------------
+seed: 42
+experiment_name: "lstm_ww_attention"
+verbose: true
+
+
+# ----------------------------------------------------------------------------
+# Paths
+# ----------------------------------------------------------------------------
 data:
   train_csv: "data/train/training_data.csv"
   val_glob: "data/val/val_*.csv"
   test_glob: "data/test/test_*.csv"
   submission_template: "data/submission.csv"
+  
+  # Output directories
   artifacts_dir: "artifacts"
   models_dir: "artifacts/models"
+  plots_dir: "artifacts/plots"
+  logs_dir: "artifacts/logs"
 
+
+# ----------------------------------------------------------------------------
+# Data Schema
+# ----------------------------------------------------------------------------
 schema:
   id_col: "ESN"
-  cycle_train_col: "Cycles"
-  cycle_eval_col: "Cycles"
+  cycle_col: "Cycles"
   snapshot_col: "Snapshot"
+  
   sensors:
     - Sensed_Altitude
     - Sensed_Mach
@@ -28,39 +51,158 @@ schema:
     - Sensed_T3
     - Sensed_Ps3
     - Sensed_T45
+  
+  targets:
+    - Cycles_to_WW
+    - Cycles_to_HPC_SV
+    - Cycles_to_HPT_SV
+  
+  snapshots: [1, 2, 3, 4, 5, 6, 7, 8]  # 8 snapshots per cycle
 
-targets:
-  - Cycles_to_WW
-  - Cycles_to_HPC_SV
-  - Cycles_to_HPT_SV
 
-snapshots: [1,2,3,4,5,6,7,8]
-missing_snapshot_fill_value: 0.0   # after standardization = mean
+# ----------------------------------------------------------------------------
+# Feature Engineering
+# ----------------------------------------------------------------------------
+features:
+  # Aggregate snapshots (8 → 1 per cycle)
+  aggregate_method: "mean"  # mean | median | max
+  
+  # Engineered features to create
+  engineered:
+    - temp_diff_norm        # [(T45-T25)/T25]²
+    - thermal_stress        # (T45-T25)*Core_Speed
+    - load_factor           # WFuel*Core_Speed
+    - speed_ratio           # Core_Speed/Fan_Speed
+    - temp_gradient         # (T45-T3)/T3
+    - pressure_ratio        # Ps3/TAT
+  
+  # Feature selection
+  use_raw_sensors: true
+  use_engineered: true
+  
+  # Preprocessing
+  standardize: true
+  handle_inf: "replace_nan"  # replace_nan | drop | clip
+  handle_nan: "drop"          # drop | fill_mean | fill_median
 
-windows:
-  L: 128            # window length in cycles
-  stride: 10        # sample every N cycles (since cycles are 10-step)
-  min_cycles: 200   # minimum cycles required to create windows
 
-ae:
-  latent_dim: 48
-  hidden_dim: 256
-  dropout: 0.1
-  noise_std: 0.05
-  lr: 0.001
-  batch_size: 64
-  epochs: 100
+# ----------------------------------------------------------------------------
+# Sequence Creation (for LSTM)
+# ----------------------------------------------------------------------------
+sequences:
+  window_sizes: [10, 30, 50, 100]  # Test multiple window sizes
+  default_window: 30                # Default per training finale
+  
+  stride: 1                         # Sliding window stride (1 = overlap completo)
+  min_cycles_per_esn: 100          # Skip ESN con meno cicli
 
-tcn:
-  channels: [128, 128, 128]
-  kernel_size: 5
-  dropout: 0.2
-  lr: 0.001
-  batch_size: 64
-  epochs: 200
-  loss: "huber"     # "mae" | "mse" | "huber"
-  huber_delta: 50.0
 
+# ----------------------------------------------------------------------------
+# Model Architecture - LSTM + Attention
+# ----------------------------------------------------------------------------
+model:
+  lstm:
+    units: [64, 32]           # Stacked LSTM layers
+    return_sequences: true    # Mantieni timesteps per attention
+    dropout: 0.3
+    recurrent_dropout: 0.0
+    l2_reg: 0.001
+  
+  attention:
+    enabled: true
+    attention_type: "additive"  # additive | multiplicative
+  
+  dense:
+    units: [16]               # Dense layers dopo attention
+    activation: "relu"
+    dropout: 0.3
+    l2_reg: 0.001
+  
+  output:
+    activation: "linear"      # Predizione log(RUL)
+    use_log_transform: true   # Target → log(target+1)
+
+
+# ----------------------------------------------------------------------------
+# Training
+# ----------------------------------------------------------------------------
+training:
+  optimizer: "adam"
+  learning_rate: 0.001
+  loss: "mse"
+  metrics: ["mae"]
+  
+  epochs: 300
+  batch_size: 32
+  validation_split: 0.2
+  shuffle: true
+  
+  callbacks:
+    early_stopping:
+      enabled: true
+      monitor: "val_loss"
+      patience: 30
+      restore_best_weights: true
+    
+    reduce_lr:
+      enabled: true
+      monitor: "val_loss"
+      factor: 0.5
+      patience: 10
+      min_lr: 1.0e-6
+    
+    model_checkpoint:
+      enabled: true
+      monitor: "val_loss"
+      save_best_only: true
+
+
+# ----------------------------------------------------------------------------
+# Inference
+# ----------------------------------------------------------------------------
 inference:
-  use_end_to_end_finetune: false
+  # Preprocessing test data
+  use_same_scaler: true       # Usa scaler da training
+  
+  # Post-processing predictions
+  clip_predictions: true
   clip_min: 0.0
+  clip_max: null               # null = no upper clip
+  
+  # Uncertainty quantification
+  ensemble:
+    enabled: false
+    n_models: 5
+    seeds: [42, 123, 456, 789, 101]
+
+
+# ----------------------------------------------------------------------------
+# Evaluation
+# ----------------------------------------------------------------------------
+evaluation:
+  metrics:
+    - MAE
+    - RMSE
+    - R2
+    - Correlation
+    - MAPE
+  
+  # Per-ESN analysis
+  per_esn_metrics: true
+  
+  # Plots
+  plots:
+    predictions: true           # Actual vs Predicted
+    training_history: true      # Loss curves
+    residuals: false            # Residuals plot
+    feature_importance: false   # SHAP values (slow)
+
+
+# ----------------------------------------------------------------------------
+# Submission
+# ----------------------------------------------------------------------------
+submission:
+  format: "csv"
+  columns: ["ESN", "Cycles_to_WW", "Cycles_to_HPC_SV", "Cycles_to_HPT_SV"]
+  index: false
+  float_format: "%.2f"
