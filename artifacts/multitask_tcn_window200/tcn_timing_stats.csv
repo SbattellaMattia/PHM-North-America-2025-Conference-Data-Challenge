@@ -1,0 +1,2 @@
+Model,Window,Training_Time_s,Inference_Time_s,Inference_ms_per_seq
+TCN,200,1039.9310085773468,1.5919098854064941,0.22364567089161197

@@ -17,6 +17,7 @@ verbose: true
 # ----------------------------------------------------------------------------
 data:
   train_csv: "data/train/training_data.csv"
+  train_clean_csv: "data/train/training_data_clean.csv" 
   val_glob: "data/val/val_*.csv"
   test_glob: "data/test/test_*.csv"
   submission_template: "data/submission.csv"
