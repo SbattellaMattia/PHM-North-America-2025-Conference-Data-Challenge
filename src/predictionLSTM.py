@@ -373,8 +373,8 @@ def build_lstm_attention_multitask(timesteps, n_features,
         },
         loss_weights={
             'output_ww': 1.0,
-            'output_hpc': 0.5,
-            'output_hpt': 0.7
+            'output_hpc': 1.0,
+            'output_hpt': 1.0,
         },
         metrics={
             'output_ww': ['mae'],
