@@ -93,7 +93,7 @@ def create_base_features(df):
     # NUOVE FEATURE: HPTC e HPT
     # ========================================================================
 
-    '''# Feature 7: HPTC - Efficienza compressore alta pressione
+    # Feature 7: HPTC - Efficienza compressore alta pressione
     gamma = 1.4  # Rapporto calori specifici aria
     pressure_ratio_hptc = df['Sensed_Ps3'] / (df['Sensed_P25'] + 1e-6)
     temp_ratio_hptc = df['Sensed_T3'] / (df['Sensed_T25'] + 1e-6)
@@ -107,7 +107,7 @@ def create_base_features(df):
     df['hpt_stress_indicator'] = (
         (df['Sensed_Mach'] - df['Sensed_T3']) / 
         (df['Sensed_T45'] + 1e-6)
-    )'''
+    )
 
     print(f"  Created 8 engineered features (6 originali + 2 nuove)")
 
