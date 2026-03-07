@@ -11,7 +11,7 @@ from src.utils import load_config
 from sklearn.model_selection import GridSearchCV, GroupKFold
 
 # ==========================================
-# 0.Visualizzazione e salvataggio
+# Visualizzazione e salvataggio
 # ==========================================
 
 def save_results(fold_results, out_dir):
@@ -36,14 +36,7 @@ def save_results(fold_results, out_dir):
     return df_res
 
 def plot_results(fold_results, out_dir):
-    """
-    Genera i grafici per i risultati della validazione incrociata.
-    
-    fold_results: lista di dizionari, dove ogni dizionario contiene:
-                  'left_out_esn', 'info_test', 'y_true', 'y_pred', 
-                  'mae', 'twe', 'r2', 'improvement'
-    out_dir: cartella dove salvare i grafici
-    """
+
     os.makedirs(out_dir, exist_ok=True)
 
     # 1. Grafici per singolo fold
@@ -126,7 +119,7 @@ def plot_results(fold_results, out_dir):
     print(f"\n  ✓ Plots saved → {out_dir}/")
 
 # ==========================================
-# 1. Caricamento Dati
+# Caricamento Dati
 # ==========================================
 print("\nLoading data...")
 cfg = load_config("configs/config.yaml")
@@ -135,7 +128,7 @@ df = df.rename(columns={'Cycles_Since_New': 'Cycles'})
 df = df.dropna().reset_index(drop=True)
 
 # ==========================================
-# 2. Definizione dei Gruppi di Sensori
+# Definizione dei Gruppi di Sensori
 # ==========================================
 operating_sensors = [
     "Sensed_Mach", "Sensed_Altitude", "Sensed_Pamb", "Sensed_TAT",
@@ -152,7 +145,7 @@ degradation_sensors = [
 print(degradation_sensors)
 
 # ==========================================
-# 3. Calcolo dei Residui (Engine by Engine)
+# Calcolo dei Residui (Engine by Engine)
 # ==========================================
 engines_data = []
 
@@ -173,7 +166,7 @@ for esn in df['ESN'].unique():
 df_residuals = pd.concat(engines_data).reset_index(drop=True)
 
 # ==========================================
-# 4. Raggruppamento per Ciclo
+# Raggruppamento per Ciclo
 # ==========================================
 target_cols = ['Cycles_to_HPC_SV']
 residual_cols = [f"{col}_res" for col in degradation_sensors]
@@ -182,18 +175,17 @@ others_cols = ['HPC_Eff_Index_clean']
 df_agg = df_residuals.groupby(['ESN', 'Cycles'])[target_cols + residual_cols + others_cols].median().reset_index()
 
 # ==========================================
-# 5. PREPARAZIONE FEATURE PER LIGHTGBM
+# Preparazione feature per LIGHTGBM
 # ==========================================
 residual_features = [col for col in df_agg.columns if col.endswith('_res')]
 
 for col in residual_features:
-    # Trend 50 cicli
+
     df_agg[f"{col}_roll50"] = df_agg.groupby("ESN")[col].transform(lambda x: x.rolling(window=50, min_periods=1).mean())
     df_agg[f"{col}_diff50"] = df_agg.groupby("ESN")[col].diff(50)
 
 df_agg = df_agg.dropna().reset_index(drop=True)
 
-# Lista feature finale 
 feature_cols = (
     residual_features +
     [f"{col}_roll50" for col in residual_features] + 
@@ -201,12 +193,11 @@ feature_cols = (
     others_cols
 )
 
-#print(f"\nFeature che passeremo al modello ({len(feature_cols)}):", feature_cols)
-
-
+'''
 # ==========================================
-# 6. HYPERPARAMETER TUNING 
+# Hyperparameter tuning 
 # ==========================================
+
 print("\n--- INIZIO RICERCA MIGLIORI PARAMETRI (GRID SEARCH) ---")
 X_all = df_agg[feature_cols]
 y_all = df_agg["Cycles_to_HPC_SV"]
@@ -239,8 +230,10 @@ best_params = grid_search.best_params_
 print(f"\n=> MIGLIORI PARAMETRI TROVATI: {best_params}")
 print(f"=> MIGLIOR MAE (in validazione): {-grid_search.best_score_:.2f}\n")
 
+'''
+
 # ==========================================
-# 6. Training Loop (LOEO)
+# Training Loop (LOEO)
 # ==========================================
 engines = df_agg["ESN"].unique()
 all_results = []
@@ -250,7 +243,6 @@ fold_results = []
 for test_engine in engines:
     print(f"--- Elaborazione Motore {test_engine} ---")
     
-    # Usiamo df_agg
     df_train = df_agg[df_agg["ESN"] != test_engine]
     df_test = df_agg[df_agg["ESN"] == test_engine].copy()
 
@@ -273,7 +265,6 @@ for test_engine in engines:
     df_test["RUL_pred"] = model.predict(X_test).clip(min=0)
   
     
-    # Calcolo metriche
     mae_engine = mean_absolute_error(df_test["Cycles_to_HPC_SV"], df_test["RUL_pred"])
     r2_engine = r2_score(df_test["Cycles_to_HPC_SV"], df_test["RUL_pred"])
     metrics_per_engine[test_engine] = {"MAE": mae_engine, "R2": r2_engine}
@@ -288,17 +279,15 @@ for test_engine in engines:
     "y_pred": df_test["RUL_pred"].values,
     "mae": mae_engine,
     "r2": r2_engine,
-    "twe": np.mean(np.abs(df_test["Cycles_to_HPC_SV"] - df_test["RUL_pred"])),  # puoi cambiare formula
-    "improvement": 0,  # placeholder se non hai baseline
     "info_test": df_test[["Cycles"]]
 
 })
-    # Esempio di chiamata
+
 plot_results(fold_results, "outputHPC")
 save_results(fold_results, "outputHPC")
 
 # ==========================================
-# 7. Ulteriore Visualizzazione
+# Ulteriore Visualizzazione
 # ==========================================
 df_all = pd.concat(all_results)
 rows = math.ceil(len(engines) / 2)
