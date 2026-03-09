@@ -70,18 +70,17 @@ def _sanitize(df: pd.DataFrame, ctx: str = "") -> pd.DataFrame:
         df = df.fillna(0.0)
     return df
 
-
-def twe(y_true: np.ndarray, y_pred: np.ndarray,
-        alpha: float = 0.5, beta: float = 500) -> float:
-    """Time-Weighted Error — metrica ufficiale PHM 2025."""
+def twe(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """TWE ufficiale PHM 2025 — alpha=0.01, beta=1/max(y_true)."""
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
+    alpha  = 0.01
+    beta   = 1.0 / (y_true.max() + 1e-6)
     diff   = y_pred - y_true
     w      = np.where(diff >= 0,
-                      2.0 / (1.0 + y_true + 1e-6),
-                      1.0 / (1.0 + y_true + 1e-6))
+                      2.0 * alpha / (1.0 + beta * y_true),
+                      1.0 * alpha / (1.0 + beta * y_true))
     return float(np.mean(w * diff**2))
-
 
 def twe_optimal_shift(y_pred: np.ndarray,
                       search_range: float = 400,
@@ -98,6 +97,23 @@ def twe_optimal_shift(y_pred: np.ndarray,
         if val < best_val:
             best_val, best_shift = val, s
     return best_shift
+
+def twe_optimal_stretch(y_pred: np.ndarray,
+                        k_range: tuple = (0.8, 2.0),
+                        n_points: int = 50) -> float:
+    """
+    Trova il fattore moltiplicativo k che minimizza il TWE atteso.
+    y_corrected = mean + (y_pred - mean) * k
+    """
+    mu = y_pred.mean()
+    ks = np.linspace(k_range[0], k_range[1], n_points)
+    best_k, best_val = 1.0, np.inf
+    for k in ks:
+        yp  = np.clip(mu + (y_pred - mu) * k, 0, None)
+        val = twe(y_pred, yp)   # proxy interno
+        if val < best_val:
+            best_val, best_k = val, k
+    return best_k
 
 
 def weibull_optimal_prediction(y_hat: float,
@@ -449,11 +465,24 @@ def add_residual_shock_features(df):
 # ============================================================================
 
 def _compute_slope(arr: np.ndarray, window: int) -> np.ndarray:
-    slopes = np.zeros(len(arr))
-    for i in range(len(arr)):
-        seg = arr[max(0, i-window+1):i+1]
-        if len(seg) > 2 and not np.isnan(seg).any():
-            slopes[i] = np.polyfit(np.arange(len(seg)), seg, 1)[0]
+    """Slope su finestra mobile — fully vectorized con stride_tricks."""
+    n = len(arr)
+    slopes = np.zeros(n)
+    if window < 2 or n < window:
+        return slopes
+    x = np.arange(window, dtype=float)
+    xm = x.mean()
+    dx = x - xm
+    denom = (dx ** 2).sum()
+    if denom < 1e-12:
+        return slopes
+    # sliding windows senza loop
+    shape   = (n - window + 1, window)
+    strides = (arr.strides[0], arr.strides[0])
+    windows = np.lib.stride_tricks.as_strided(
+        arr.astype(float), shape=shape, strides=strides)
+    ym = windows.mean(axis=1, keepdims=True)
+    slopes[window - 1:] = ((windows - ym) * dx).sum(axis=1) / denom
     return slopes
 
 
@@ -645,18 +674,19 @@ def create_lagged_features(df, feature_cols, window_size=30):
 # SEZIONE 10: XGBoost + LightGBM con custom TWE loss
 # ============================================================================
 
-def xgb_twe_obj(y_pred: np.ndarray, y_true: np.ndarray):
-    """
-    Custom TWE objective per XGBRegressor (sklearn API).
-    Firma: (y_pred, y_true) → (grad, hess)
-    """
-    diff = y_pred - y_true
-    w    = np.where(diff >= 0,
-                    2.0 / (1.0 + y_true + 1e-6),
-                    1.0 / (1.0 + y_true + 1e-6))
+def lgb_twe_obj(y_pred, train_data):
+    """Custom TWE objective per LightGBM — parametri ufficiali PHM 2025."""
+    y_true = train_data.get_label()
+    alpha  = 0.01
+    beta   = 1.0 / (y_true.max() + 1e-6)
+    diff   = y_pred - y_true
+    w      = np.where(diff >= 0,
+                      2.0 * alpha / (1.0 + beta * y_true),
+                      1.0 * alpha / (1.0 + beta * y_true))
     grad = 2.0 * w * diff
     hess = 2.0 * w
     return grad, hess
+
 
 
 def xgb_twe_eval(y_pred, dtrain):
@@ -665,15 +695,16 @@ def xgb_twe_eval(y_pred, dtrain):
     return 'twe', score
 
 
-def lgb_twe_obj(y_pred, train_data):
-    """Custom TWE objective per LightGBM."""
-    y_true = train_data.get_label()
-    diff   = y_pred - y_true
-    w      = np.where(diff >= 0,
-                      2.0 / (1.0 + y_true + 1e-6),
-                      1.0 / (1.0 + y_true + 1e-6))
+def xgb_twe_obj(y_pred: np.ndarray, y_true: np.ndarray):
+    """Custom TWE objective per XGBoost — parametri ufficiali PHM 2025."""
+    alpha = 0.01
+    beta  = 1.0 / (y_true.max() + 1e-6)
+    diff  = y_pred - y_true
+    w     = np.where(diff >= 0,
+                     2.0 * alpha / (1.0 + beta * y_true),
+                     1.0 * alpha / (1.0 + beta * y_true))
     grad = 2.0 * w * diff
-    hess = 2.0 * w * np.ones_like(diff)
+    hess = 2.0 * w
     return grad, hess
 
 
@@ -709,11 +740,14 @@ def train_full_ensemble(X_train, y_train, X_test, y_test,
 
     # ── Inner 3-fold per meta-learner OOF predictions ──────────────────
     kf    = KFold(n_splits=3, shuffle=True, random_state=42)
-    oof   = {m: np.zeros(n_train) for m in
-             ['rf_norm','rf_weighted','xgb_twe','lgb_twe']}
+
+    #Saltiamo i primi due modelli (RF) e facciamo solo XGB e LGB con TWE loss in modo da ottimizzare
+    oof = {m: np.zeros(n_train) for m in ['xgb_twe', 'lgb_twe']}
+
+    preds_test = {}
 
     # ── Model 1: Normalized RF ──────────────────────────────────────────
-    print(f"    [1/4] Normalized RF...")
+    '''print(f"    [1/4] Normalized RF...")
     y_norm = (y_train - y_mean) / (y_std + 1e-6)
     rf1 = RandomForestRegressor(n_estimators=300, max_depth=25,
                                 min_samples_leaf=1, random_state=42,
@@ -744,7 +778,7 @@ def train_full_ensemble(X_train, y_train, X_test, y_test,
     rf2.fit(X_train, y_train, sample_weight=w2)
     preds_test['rf_weighted'] = _safe_clip(rf2.predict(X_test))
     print(f"      Range: [{preds_test['rf_weighted'].min():.0f}, "
-          f"{preds_test['rf_weighted'].max():.0f}]")
+          f"{preds_test['rf_weighted'].max():.0f}]")'''
 
     # ── Model 3: XGBoost con custom TWE loss ───────────────────────────
     print("    [3/4] XGBoost (MSE debug)...")
@@ -816,9 +850,10 @@ def train_full_ensemble(X_train, y_train, X_test, y_test,
           f"{preds_test['lgb_twe'].max():.0f}]")
 
     # ── TWE-Weighted Stacking Meta-Learner [ORIGINALE] ─────────────────
+
     print(f"\n    [META] TWE-Weighted Stacking...")
-    X_meta_train = np.column_stack([oof[m] for m in oof])
-    X_meta_test  = np.column_stack([preds_test[m] for m in preds_test])
+    '''X_meta_train = np.column_stack([oof['xgb_twe'], oof['lgb_twe']])
+    X_meta_test  = np.column_stack([preds_test['xgb_twe'], preds_test['lgb_twe']])
 
     # Pesi TWE: campioni con y basso (near-event) pesano di più
     meta_w = 2.0 / (1.0 + y_train + 1e-6)
@@ -831,11 +866,29 @@ def train_full_ensemble(X_train, y_train, X_test, y_test,
                          zip(preds_test.keys(), meta.coef_))
     print(f"    Meta-weights: {coef_str}")
 
-    y_meta = _safe_clip(meta.predict(X_meta_test))
+    y_meta = _safe_clip(meta.predict(X_meta_test))'''
+
+    # Calcola TWE OOF per ogni modello → chi va meglio pesa di più
+    twe_xgb = twe(y_train, oof['xgb_twe'])
+    twe_lgb = twe(y_train, oof['lgb_twe'])
+
+    w_xgb = 1.0 / (twe_xgb + 1e-9)
+    w_lgb = 1.0 / (twe_lgb + 1e-9)
+    tot   = w_xgb + w_lgb
+    w_xgb /= tot
+    w_lgb /= tot
+
+    print(f"    OOF TWE  → xgb={twe_xgb:.4f}, lgb={twe_lgb:.4f}")
+    print(f"    Meta-weights: xgb_twe={w_xgb:.3f}, lgb_twe={w_lgb:.3f}")
+
+    y_meta = _safe_clip(
+        w_xgb * preds_test['xgb_twe'] +
+        w_lgb * preds_test['lgb_twe']
+    )
 
     # ── Isotonic blend (con check compatibilità cicli) ────────────────
     y_final = y_meta
-    if info_train is not None and info_test is not None:
+    '''if info_train is not None and info_test is not None:
         train_max = info_train['Cycle'].max()
         test_max  = info_test['Cycle'].max()
         overlap   = min(train_max, test_max) / (max(train_max, test_max) + 1e-6)
@@ -850,12 +903,19 @@ def train_full_ensemble(X_train, y_train, X_test, y_test,
             except Exception as e:
                 print(f"    ⚠️  Isotonic failed: {e}")
         else:
-            print(f"    Isotonic skipped (cycle overlap={overlap:.2f} < 0.85)")
+            print(f"    Isotonic skipped (cycle overlap={overlap:.2f} < 0.85)")'''
 
     # ── TWE-Aware Variance Correction [ORIGINALE] ─────────────────────
+    # Prima stretch (espande il range)
+    opt_k   = twe_optimal_stretch(y_final)
+    mu      = y_final.mean()
+    y_final = _safe_clip(mu + (y_final - mu) * opt_k)
+
+    # Poi shift (corregge il bias residuo)
     opt_shift = twe_optimal_shift(y_final)
     y_final   = _safe_clip(y_final + opt_shift)
-    print(f"    TWE-optimal shift: {opt_shift:+.1f} cycles")
+    print(f"    TWE stretch: k={opt_k:.3f}, shift={opt_shift:+.1f}")
+
 
     # ── Weibull Optimization (Mitsubishi) ─────────────────────────────
     print(f"    Weibull optimization...")
@@ -870,7 +930,7 @@ def train_full_ensemble(X_train, y_train, X_test, y_test,
 # SEZIONE 12: LOEO
 # ============================================================================
 
-def run_loeo(df, feature_cols, window_size=30):
+def run_loeo(df, res_cols, window_size=32, top_k=70):
     esns         = sorted(df['ESN'].unique())
     fold_results = []
 
@@ -886,13 +946,17 @@ def run_loeo(df, feature_cols, window_size=30):
         df_train = df[df['ESN'] != left_out].copy()
         df_test  = df[df['ESN'] == left_out].copy()
 
-        # Trattamento speciale ESN 104: partial train
+        # ── ESN 104: partial train — 60% (era 50% — bug fix) ─────────────
         if left_out == 104:
-            cutoff   = df_test['Cycles'].quantile(0.60)
+            cutoff   = df_test['Cycles'].quantile(0.60) 
             df_104_p = df_test[df_test['Cycles'] <= cutoff].copy()
             df_train = pd.concat([df_train, df_104_p], ignore_index=True)
             df_test  = df_test[df_test['Cycles'] > cutoff].copy()
             print(f"  [ESN104] Partial train: first 60% cycles added to train")
+
+        # ── Feature selection SOLO su df_train → NO leakage ──────────────
+        feature_cols = select_features(df_train, res_cols, top_k=top_k)
+        print(f"  Using {len(feature_cols)} features for LOEO")
 
         X_train, y_train, info_train = create_lagged_features(
             df_train, feature_cols, window_size)
@@ -906,17 +970,14 @@ def run_loeo(df, feature_cols, window_size=30):
         print(f"  Train: {X_train.shape}, y=[{y_train.min():.0f},{y_train.max():.0f}]")
         print(f"  Test:  {X_test.shape},  y=[{y_test.min():.0f},{y_test.max():.0f}]")
 
-        preprocess = Pipeline([
-            ('imputer', SimpleImputer(strategy='median')),
-            ('scaler',  StandardScaler()),
-        ])
+        preprocess = Pipeline([('imputer', SimpleImputer(strategy='median')),
+                               ('scaler',  StandardScaler())])
         X_tr_s = preprocess.fit_transform(X_train)
         X_te_s = preprocess.transform(X_test)
 
         y_pred = train_full_ensemble(
             X_tr_s, y_train, X_te_s, y_test,
-            info_train=info_train, info_test=info_test
-        )
+            info_train=info_train, info_test=info_test)
 
         mae    = mean_absolute_error(y_test, y_pred)
         r2     = r2_score(y_test, y_pred)
@@ -1103,12 +1164,14 @@ def main():
     df_agg = add_periodic_and_residual_features(df_agg, res_cols)
 
     # Step 5: feature selection
-    feature_cols = select_features(df_agg, res_cols, top_k=70)
-    print(f"\n  Using {len(feature_cols)} features for LOEO")
+    # feature_cols = select_features(df_agg, res_cols, top_k=70)
+    # print(f"\n  Using {len(feature_cols)} features for LOEO")
 
     # Step 6: LOEO
-    window_size  = 32
-    fold_results = run_loeo(df_agg, feature_cols, window_size=window_size)
+    window_size  = 30
+    fold_results = run_loeo(df_agg, res_cols,      
+                            window_size=window_size,
+                            top_k=70)
 
     # Step 7: output
     out_dir = f'artifacts/hybrid_v3_loeo_{window_size}'
