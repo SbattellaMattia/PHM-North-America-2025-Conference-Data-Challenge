@@ -18,11 +18,7 @@ from .models.ensemble    import train_full_ensemble
 
 def run_loeo(df: pd.DataFrame, res_cols: list,
              window_size: int = 32, top_k: int = 70) -> list:
-    """
-    Esegue LOEO esattamente come il monolite originale:
-      - feature selection su df_train ad ogni fold (no leakage)
-      - ESN 104: partial train (prime 60% di cicli aggiunte al train)
-    """
+
     esns         = sorted(df["ESN"].unique())
     fold_results = []
 
@@ -38,20 +34,23 @@ def run_loeo(df: pd.DataFrame, res_cols: list,
         df_train = df[df["ESN"] != left_out].copy()
         df_test  = df[df["ESN"] == left_out].copy()
 
-        # ── ESN 104 partial train ─────────────────────────────────────────────
+        # ── ESN 104 partial train ─────────────────────────────────────────
         if left_out == 104:
-            cutoff    = df_test["Cycles"].quantile(0.60)
-            df_104_p  = df_test[df_test["Cycles"] <= cutoff].copy()
-            df_train  = pd.concat([df_train, df_104_p], ignore_index=True)
-            df_test   = df_test[df_test["Cycles"] > cutoff].copy()
+            cutoff   = df_test["Cycles"].quantile(0.60)
+            df_104_p = df_test[df_test["Cycles"] <= cutoff].copy()
+            df_train = pd.concat([df_train, df_104_p], ignore_index=True)
+            df_test  = df_test[df_test["Cycles"] > cutoff].copy()
             print("  [ESN104] Partial train: first 60% cycles added to train")
 
-        # ── Feature selection su train (DENTRO il fold) ───────────────────────
+        # ── Feature selection SOLO su df_train (no leakage) ──────────────
         feature_cols = select_features(df_train, res_cols, top_k=top_k)
         print(f"  Using {len(feature_cols)} features for LOEO")
 
-        X_train, y_train, info_train = create_lagged_features(df_train, feature_cols, window_size)
-        X_test,  y_test,  info_test  = create_lagged_features(df_test,  feature_cols, window_size)
+        # ── Lagged features ───────────────────────────────────────────────
+        X_train, y_train, info_train = create_lagged_features(
+            df_train, feature_cols, window_size)
+        X_test,  y_test,  info_test  = create_lagged_features(
+            df_test,  feature_cols, window_size)
 
         if len(X_test) == 0:
             print(f"  ⚠️  No test samples for ESN {left_out}, skip")
@@ -95,3 +94,4 @@ def run_loeo(df: pd.DataFrame, res_cols: list,
         })
 
     return fold_results
+

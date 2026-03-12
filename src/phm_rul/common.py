@@ -45,14 +45,18 @@ def safe_clip(arr: np.ndarray) -> np.ndarray:
 # ── TWE ──────────────────────────────────────────────────────────────────────
 
 def twe(y_true: np.ndarray, y_pred: np.ndarray,
-        alpha: float = 0.5, beta: float = 500) -> float:
-    """Time-Weighted Error — metrica ufficiale PHM 2025."""
+        alpha: float = 0.01, beta: float = None) -> float:
+    """TWE normalizzato — formula ufficiale PHM 2025."""
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
-    diff   = y_pred - y_true
-    w      = np.where(diff >= 0,
-                      2.0 / (1.0 + y_true + 1e-6),
-                      1.0 / (1.0 + y_true + 1e-6))
+
+    if beta is None:
+        beta = 1.0 / (y_true.max() + 1e-6)
+
+    diff = y_pred - y_true
+    w    = np.where(diff >= 0,
+                    2.0 * alpha / (1.0 + beta * y_true),
+                    1.0 * alpha / (1.0 + beta * y_true))
     return float(np.mean(w * diff**2))
 
 

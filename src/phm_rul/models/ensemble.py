@@ -9,6 +9,7 @@ from sklearn.linear_model   import Ridge
 from sklearn.ensemble        import RandomForestRegressor
 from sklearn.isotonic        import IsotonicRegression
 from sklearn.model_selection import KFold
+from torch.cuda import device
 from xgboost                 import XGBRegressor
 
 from ..common             import twe, twe_optimal_shift, apply_weibull_optimization, safe_clip
@@ -65,7 +66,7 @@ def train_full_ensemble(X_train: np.ndarray, y_train: np.ndarray,
 
     # ── [3/4] XGBoost MSE ────────────────────────────────────────────────────
     print("    [3/4] XGBoost (MSE debug)...")
-    xgb_params = dict(n_estimators=1200, max_depth=6, learning_rate=0.03,
+    xgb_params = dict(device='cuda',tree_method="hist", n_estimators=1200, max_depth=6, learning_rate=0.03,
                       subsample=0.8, colsample_bytree=0.8,
                       reg_alpha=0.1, reg_lambda=1.0,
                       random_state=42, n_jobs=-1, verbosity=0,
@@ -77,11 +78,11 @@ def train_full_ensemble(X_train: np.ndarray, y_train: np.ndarray,
     xgb_model = XGBRegressor(**xgb_params)
     xgb_model.fit(X_train, y_train, verbose=False)
     preds_test["xgb_twe"] = safe_clip(xgb_model.predict(X_test))
-    print(f"      Range: [{preds_test['xgb_twe'].min():.0f}, {preds_test['xgb_twe'].max():.0f}]")
+    print(f"      Range: [{preds_test['xgb_twe'].min():.0f}, {preds_test['xgb_twe'].max():.0f}]") 
 
     # ── [4/4] LightGBM TWE ───────────────────────────────────────────────────
     print("    [4/4] LightGBM (TWE loss)...")
-    lgb_params = dict(objective=lgb_twe_obj, metric=None,
+    lgb_params = dict( device="cuda", gpu_device_id=1,objective=lgb_twe_obj, metric=None,
                       n_estimators=500, max_depth=6, learning_rate=0.02,
                       subsample=0.8, colsample_bytree=0.8,
                       reg_alpha=0.1, reg_lambda=1.0,
