@@ -128,6 +128,27 @@ df = df.rename(columns={'Cycles_Since_New': 'Cycles'})
 df = df.dropna().reset_index(drop=True)
 
 # ==========================================
+# Modelli per ricostruire le feature mancanti nel Test
+# ==========================================
+print("Addestramento modelli di regressione lineare per imputazione test...")
+
+# Selezioniamo tutte le feature fisiche sicuramente presenti sia in train che in test
+imputation_features = [
+    'Cycles', 'Sensed_Altitude', 'Sensed_Mach', 'Sensed_Pamb', 'Sensed_Pt2', 
+    'Sensed_TAT', 'Sensed_WFuel', 'Sensed_VAFN', 'Sensed_VBV', 'Sensed_Fan_Speed', 
+    'Sensed_Core_Speed', 'Sensed_T25', 'Sensed_T3', 'Sensed_Ps3', 'Sensed_T45', 
+    'Sensed_P25', 'Sensed_T5'
+]
+
+# Modello per ricostruire Cumulative_HPC_SVs
+lr_cum_hpc = LinearRegression()
+lr_cum_hpc.fit(df[imputation_features], df['Cumulative_HPC_SVs'])
+
+# Modello per ricostruire HPC_Eff_Index_clean
+lr_hpc_eff = LinearRegression()
+lr_hpc_eff.fit(df[imputation_features], df['HPC_Eff_Index_clean'])
+
+# ==========================================
 # Definizione dei Gruppi di Sensori
 # ==========================================
 operating_sensors = [
@@ -193,6 +214,7 @@ feature_cols = (
     others_cols
 )
 
+print(len(feature_cols), feature_cols)
 '''
 # ==========================================
 # Hyperparameter tuning 
@@ -312,3 +334,191 @@ for j in range(i + 1, len(axes)):
 plt.tight_layout()
 plt.savefig(os.path.join("outputHPC", "LGBMRegressor.png"))
 
+# 2. Creazione del grafico
+plt.figure(figsize=(10, 6))
+
+# Colori personalizzati per distinguere bene i motori
+colors = {101: '#2E86AB', 102: '#F18F01', 103: '#e74c3c', 104: '#2ecc71'}
+
+# Iteriamo su ogni motore per plottare la sua curva
+for esn in sorted(df['ESN'].unique()):
+    # Estraiamo solo i dati del motore corrente
+    data = df[df['ESN'] == esn].sort_values(by='Cycles')
+    
+    # Plottiamo Cicli vs Cicli rimanenti (RUL)
+    plt.plot(data['Cycles'], data['Cycles_to_HPC_SV'], 
+             label=f'Motore {esn}', 
+             color=colors.get(esn, 'black'), 
+             linewidth=2, 
+             alpha=0.8)
+
+# 3. Formattazione del grafico
+plt.title('Andamento della Remaining Useful Life (RUL) per Motore', fontsize=14, fontweight='bold')
+plt.xlabel('Cicli Percorsi (Cycles)', fontsize=12)
+plt.ylabel('Cicli Rimanenti alla Revisione (Cycles_to_HPC_SV)', fontsize=12)
+plt.legend(title="Engine Serial Number (ESN)", fontsize=10)
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+
+# Salvataggio dell'immagine (invece di plt.show() per ambienti virtuali o script automatici)
+plt.savefig(os.path.join("outputHPC",'rul_vs_cycles_plot.png'))
+print("Grafico salvato con successo come 'rul_vs_cycles_plot.png'")
+
+# ==========================================
+# TRAIN MODEL FINALE SU TUTTO IL TRAIN
+# ==========================================
+print("\nTraining final model on ALL engines...")
+
+X_full = df_agg[feature_cols]
+y_full = df_agg["Cycles_to_HPC_SV"]
+
+final_model = LGBMRegressor(
+    n_estimators=500,
+    learning_rate=0.02,
+    num_leaves=31,
+    max_depth=-1,
+    subsample=0.8,
+    colsample_bytree=0.6,
+    random_state=42
+)
+
+final_model.fit(X_full, y_full)
+
+print("Final model trained.")
+
+# ==========================================
+# TEST SU TUTTI I FILE NELLA CARTELLA
+# ==========================================
+
+import glob
+import re
+
+# Funzione per estrarre il numero dal nome del file (es: "test_12.csv" -> 12)
+def ordina_per_numero(filepath):
+    nome_file = os.path.basename(filepath)
+    numeri = re.findall(r'\d+', nome_file)
+    return int(numeri[0]) if numeri else 0
+
+test_folder = "test_imputed"
+# Troviamo i file e li ordiniamo NUMERICAMENTE usando la funzione creata sopra
+test_files = glob.glob(os.path.join(test_folder, "*.csv"))
+test_files = sorted(test_files, key=ordina_per_numero)
+
+print("Test folder:", os.path.abspath(test_folder))
+print(f"\nFound {len(test_files)} test files.")
+
+# Lista per salvare solo i risultati finali (1 riga per file)
+final_rul_results = []
+
+for file in test_files:
+    print(f"\nProcessing {file}")
+
+    # 1. Caricamento file
+    test_df = pd.read_csv(file)
+    test_df = test_df.rename(columns={'Cycles_Since_New': 'Cycles'})
+    test_df = test_df.dropna().reset_index(drop=True)
+
+    # 2. RICOSTRUZIONE FEATURE MANCANTI
+    test_df['Cumulative_HPC_SVs'] = lr_cum_hpc.predict(test_df[imputation_features])
+    test_df['Cumulative_HPC_SVs'] = test_df['Cumulative_HPC_SVs'].round().clip(lower=0)
+    test_df['HPC_Eff_Index_clean'] = lr_hpc_eff.predict(test_df[imputation_features])
+
+    # 3. RESIDUAL COMPUTATION
+    engines_test = []
+    for esn in test_df['ESN'].unique():
+        df_engine = test_df[test_df['ESN'] == esn].copy()
+        X_op = df_engine[operating_sensors]
+
+        for target_sensor in degradation_sensors:
+            y_deg = df_engine[target_sensor]
+            lr = LinearRegression()
+            lr.fit(X_op, y_deg)
+            y_pred = lr.predict(X_op)
+            df_engine[f"{target_sensor}_res"] = y_deg - y_pred
+
+        engines_test.append(df_engine)
+
+    df_test_res = pd.concat(engines_test).reset_index(drop=True)
+
+    # 4. AGGREGAZIONE
+    test_agg = df_test_res.groupby(['ESN', 'Cycles'])[residual_cols + others_cols].median().reset_index()
+
+    # 5. FEATURE ENGINEERING
+    for col in residual_features:
+        test_agg[f"{col}_roll50"] = test_agg.groupby("ESN")[col].transform(
+            lambda x: x.rolling(window=50, min_periods=1).mean()
+        )
+        test_agg[f"{col}_diff50"] = test_agg.groupby("ESN")[col].diff(50)
+
+    test_agg = test_agg.dropna().reset_index(drop=True)
+
+    # 6. PREDICTION
+    X_test = test_agg[feature_cols]
+    
+    # Prediciamo la RUL arrotondandola a numero intero (non ha senso avere 0.5 cicli)
+    test_agg["RUL_pred"] = final_model.predict(X_test).clip(min=0).round().astype(int)
+
+    # ===============================
+    # ESTRAZIONE RUL FINALE PER IL FILE
+    # ===============================
+    # Troviamo la riga corrispondente all'ultimo ciclo conosciuto in questo file
+    last_cycle_idx = test_agg['Cycles'].idxmax()
+    final_esn = test_agg.loc[last_cycle_idx, 'ESN']
+    final_cycle = test_agg.loc[last_cycle_idx, 'Cycles']
+    final_rul = test_agg.loc[last_cycle_idx, 'RUL_pred']
+    
+    # Salviamo il risultato per questo file
+    filename = os.path.basename(file)
+    final_rul_results.append({
+        "File": filename,
+        "ESN": final_esn,
+        "Last_Cycle_Seen": final_cycle,
+        "Predicted_RUL": final_rul
+    })
+
+# ==========================================
+# SALVATAGGIO RISULTATI GLOBALI
+# ==========================================
+
+df_final_submission = pd.DataFrame(final_rul_results)
+
+os.makedirs("outputHPC", exist_ok=True)
+save_path = "outputHPC/prediction_HPC.csv"
+df_final_submission.to_csv(save_path, index=False)
+
+print("\n" + "="*50)
+print("PREDIZIONI RUL FINALI PER OGNI FILE")
+print("="*50)
+print(df_final_submission.to_string(index=False))
+print(f"\nFile per la submission salvato in: {save_path}")
+
+# ==========================================
+# SALVATAGGIO RISULTATI GLOBALI NEL FORMATO SUBMISSION
+# ==========================================
+
+# 1. Carichiamo il file template vuoto "submission.csv"
+submission_df = pd.read_csv(cfg["data"]["submission_template"])
+
+# 2. Creiamo un dizionario dalle nostre predizioni per un accesso rapido
+# Formato: { "test_0": 4832, "test_1": 3450, ... }
+pred_dict = {}
+for res in final_rul_results:
+    # Rimuoviamo ".csv" dal nome per farlo combaciare con la colonna 'file' di submission.csv
+    nome_base = res["File"].replace(".csv", "")
+    pred_dict[nome_base] = res["Predicted_RUL"]
+
+# 3. Aggiorniamo SOLO la colonna 'Cycles_to_HPC_SV'
+# Mappiamo i valori predetti in base al nome del file. 
+# Se un file non fosse presente nelle predizioni, manterrà il suo valore originale (fillna).
+submission_df['Cycles_to_HPC_SV'] = submission_df['file'].map(pred_dict).fillna(submission_df['Cycles_to_HPC_SV']).astype(int)
+
+# 4. Salviamo il file definitivo
+os.makedirs("outputHPC", exist_ok=True)
+save_path = "outputHPC/submission_compilata.csv"
+submission_df.to_csv(save_path, index=False)
+
+print("\n" + "="*50)
+print("FILE SUBMISSION COMPLETATO")
+print("="*50)
+print(submission_df.head(15).to_string(index=False))
+print(f"\nFile pronto per l'invio salvato in: {save_path}")
