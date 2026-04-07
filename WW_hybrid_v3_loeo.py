@@ -29,7 +29,6 @@ from scipy.stats           import weibull_min
 
 from sklearn.linear_model  import Ridge
 from sklearn.ensemble      import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.isotonic      import IsotonicRegression
 from sklearn.impute        import SimpleImputer
 from sklearn.metrics       import mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
