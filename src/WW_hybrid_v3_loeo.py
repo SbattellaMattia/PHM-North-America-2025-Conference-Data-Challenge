@@ -1009,6 +1009,97 @@ def run_loeo(df, res_cols, window_size=32, top_k=70):
 
 
 # ============================================================================
+# SEZIONE 12b: TRAIN ON ALL + PREDICT TEST
+# ============================================================================
+
+def run_full_train_and_predict(df, res_cols, window_size=32, top_k=70):
+    """
+    Addestra su TUTTI gli ESN e predice su ogni file in data/test_imputed/.
+    Output: submission.csv con file,Cycles_to_WW,Cycles_to_HPC_SV,Cycles_to_HPT_SV
+    """
+    print("\n" + "="*70)
+    print("TRAIN ON ALL DATA + PREDICT TEST")
+    print("="*70)
+
+    # ── Feature selection su tutti i dati ──────────────────────────────
+    feature_cols = select_features(df, res_cols, top_k=top_k)
+    print(f"\n  Features selected: {len(feature_cols)}")
+
+    # ── Lagged features su tutto il training ───────────────────────────
+    X_train, y_train, info_train = create_lagged_features(df, feature_cols, window_size)
+    ok = ~np.isnan(y_train)
+    X_train, y_train = X_train[ok], y_train[ok]
+    print(f"  Train samples: {len(y_train)}, y=[{y_train.min():.0f}, {y_train.max():.0f}]")
+
+    # ── Preprocessing ──────────────────────────────────────────────────
+    preprocess = Pipeline([
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler',  StandardScaler())
+    ])
+    X_tr_s = preprocess.fit_transform(X_train)
+
+    # ── Leggi i file di test ───────────────────────────────────────────
+    
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # cartella dello script
+    test_dir = os.path.join(BASE_DIR, '..', 'data', 'test_imputed')
+    test_files = sorted([f for f in os.listdir(test_dir) if f.endswith('.csv')])
+    print(f"\n  Test files found: {len(test_files)}")
+
+    rows = []
+    for fname in test_files:
+        file_id    = fname.replace('.csv', '')
+        df_test_raw = pd.read_csv(os.path.join(test_dir, fname))
+        print(f"\n  ── {fname} ({df_test_raw.shape}) ──")
+
+        # Aggiungi ESN fittizio e target dummy se mancanti
+        if 'ESN' not in df_test_raw.columns:
+            df_test_raw['ESN'] = 9999
+        if 'Cycles_to_WW' not in df_test_raw.columns:
+            df_test_raw['Cycles_to_WW'] = 0.0
+
+        # Feature engineering identica al train
+        df_t, _     = compute_sensor_residuals(df_test_raw)
+        df_t        = create_base_features(df_t)
+        df_t_agg    = aggregate_by_cycle(df_t, res_cols)
+        df_t_agg    = estimate_ww_period_per_engine(df_t_agg)
+        df_t_agg    = add_hpc_ww_recovery_feature(df_t_agg)
+        df_t_agg    = add_residual_shock_features(df_t_agg)
+        df_t_agg    = add_periodic_and_residual_features(df_t_agg, res_cols)
+
+        # Assicura che tutte le colonne esistano
+        for col in feature_cols:
+            if col not in df_t_agg.columns:
+                df_t_agg[col] = 0.0
+
+        X_test, _, _ = create_lagged_features(df_t_agg, feature_cols, window_size)
+
+        if len(X_test) == 0:
+            ww_pred = int(round(float(y_train.mean())))
+            print(f"  ⚠️  Not enough cycles → fallback mean={ww_pred}")
+        else:
+            X_te_s  = preprocess.transform(X_test)
+            y_p     = train_full_ensemble(X_tr_s, y_train, X_te_s, y_train)
+            ww_pred = max(0, int(round(float(y_p[-1]))))   # ultima predizione = ciclo corrente
+            print(f"  Cycles_to_WW = {ww_pred}")
+
+        rows.append({
+            'file':              file_id,
+            'Cycles_to_WW':     ww_pred,
+            'Cycles_to_HPC_SV': 0,   # placeholder — da riempire dopo
+            'Cycles_to_HPT_SV': 0,   # placeholder — da riempire dopo
+        })
+
+    df_sub = pd.DataFrame(rows)
+    df_sub.to_csv('submission.csv', index=False)
+    print("\n" + "="*70)
+    print("SAVED: submission.csv")
+    print("="*70)
+    print(df_sub.to_string(index=False))
+    return df_sub
+
+
+
+# ============================================================================
 # SEZIONE 13: VISUALIZZAZIONE
 # ============================================================================
 
@@ -1168,7 +1259,7 @@ def main():
     # print(f"\n  Using {len(feature_cols)} features for LOEO")
 
     # Step 6: LOEO
-    window_size  = 30
+    '''window_size  = 30
     fold_results = run_loeo(df_agg, res_cols,      
                             window_size=window_size,
                             top_k=70)
@@ -1181,7 +1272,8 @@ def main():
     print(f"\n📁 Results: {out_dir}/")
     print("\n" + "="*70)
     print("DONE ✨")
-    print("="*70)
+    print("="*70)'''
+    run_full_train_and_predict(df_agg, res_cols, window_size=30, top_k=70)
 
 
 if __name__ == '__main__':

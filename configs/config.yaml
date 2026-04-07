@@ -19,7 +19,7 @@ data:
   train_csv: "data/train/training_data.csv"
   train_clean_csv: "data/train/training_data_clean.csv" 
   test: "data/test/"
-  test_imputecd: "data/test_imputed/"
+  test_imputed: "data/test_imputed/"
   val_glob: "data/val/val_*.csv"
   test_glob: "data/test/test_*.csv"
   submission_template: "data/submission.csv"
