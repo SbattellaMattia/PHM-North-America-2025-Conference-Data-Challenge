@@ -11,16 +11,16 @@ warnings.filterwarnings('ignore')
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  
 
 from sklearn.linear_model   import Ridge
 from sklearn.ensemble       import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.isotonic       import IsotonicRegression          # [IMPROVEMENT] isotonic blend
+from sklearn.isotonic       import IsotonicRegression          
 from sklearn.impute         import SimpleImputer
 from sklearn.metrics        import mean_absolute_error, r2_score
 from sklearn.preprocessing  import StandardScaler
 from sklearn.pipeline       import Pipeline
-from xgboost                import XGBRegressor                # [IMPROVEMENT] 4° modello
+from xgboost                import XGBRegressor                
 
 from src.utils import load_config
 

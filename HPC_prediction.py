@@ -399,7 +399,7 @@ def ordina_per_numero(filepath):
     numeri = re.findall(r'\d+', nome_file)
     return int(numeri[0]) if numeri else 0
 
-test_folder = "test_imputed"
+test_folder = cfg["data"]["test_imputed"]
 # Troviamo i file e li ordiniamo NUMERICAMENTE usando la funzione creata sopra
 test_files = glob.glob(os.path.join(test_folder, "*.csv"))
 test_files = sorted(test_files, key=ordina_per_numero)
